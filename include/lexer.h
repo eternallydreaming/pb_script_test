@@ -22,4 +22,4 @@ typedef struct Token {
   };
 } Token;
 
-Token *lexer_tokenize(const char *source);
+Token *tokenize_script(const char *source);

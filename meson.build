@@ -3,6 +3,8 @@ project('pb_script_test', 'c')
 sources = [
   'src/main.c',
   'src/lexer.c',
+  'src/expr.c',
+  'src/parser.c',
 ]
 
 executable(

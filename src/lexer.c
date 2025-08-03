@@ -91,7 +91,7 @@ static Token advance_token(Lexer *lexer) {
   }
 }
 
-Token *lexer_tokenize(const char *source) {
+Token *tokenize_script(const char *source) {
   Lexer lexer = {
       .source = source,
       .source_len = strlen(source),
