@@ -12,14 +12,29 @@ typedef enum TokenType {
   TokenType_Slash,
 
   TokenType_Number,
+  TokenType_String,
 } TokenType;
 
 typedef struct Token {
   TokenType type;
   union {
     double number;
-    char *string;
+    struct {
+      const char *start;
+      size_t len;
+    } text;
   };
 } Token;
 
-Token *tokenize_script(const char *source);
+typedef struct Lexer {
+  const char *source;
+  size_t source_len;
+  size_t pos;
+
+  Token token;
+} Lexer;
+
+Lexer new_lexer(const char *source);
+
+Token lexer_peek(const Lexer *lexer);
+Token lexer_advance(Lexer *lexer);

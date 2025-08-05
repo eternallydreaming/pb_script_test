@@ -2,4 +2,4 @@
 
 #include "lexer.h"
 
-void compile_script(const Token *tokens);
+void compile_script(const char *source);

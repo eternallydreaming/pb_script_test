@@ -5,27 +5,18 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 typedef struct Parser {
-  const Token *tokens;
-  size_t token_idx;
+  Lexer lexer;
 } Parser;
 
-static Token peek(const Parser *parser) {
-  return parser->tokens[parser->token_idx];
-}
+static Token peek(const Parser *parser) { return lexer_peek(&parser->lexer); }
 
 static bool is_eof(const Parser *parser) {
   return peek(parser).type == TokenType_Eof;
 }
 
-static Token advance(Parser *parser) {
-  Token token = peek(parser);
-  if (token.type != TokenType_Eof)
-    parser->token_idx++;
-  return token;
-}
+static Token advance(Parser *parser) { return lexer_advance(&parser->lexer); }
 
 static bool match(Parser *parser, TokenType expected) {
   Token token = peek(parser);
@@ -75,10 +66,9 @@ BINARY_OP_FN(factor, prefix,
 BINARY_OP_FN(sum, factor,
              token.type == TokenType_Plus || token.type == TokenType_Minus)
 
-void compile_script(const Token *tokens) {
+void compile_script(const char *source) {
   Parser parser = {
-      .tokens = tokens,
-      .token_idx = 0,
+      .lexer = new_lexer(source),
   };
 
   Expr *expr = sum(&parser);
