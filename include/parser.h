@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bytecode.h"
 #include "lexer.h"
 
-void compile_script(const char *source);
+Chunk compile_script(const char *source);

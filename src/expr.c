@@ -72,20 +72,19 @@ void simplify_expr(Expr *expr) {
     if (operand->type != ExprType_Literal)
       break;
 
-    Value result = {
-        .type = ValueType_Number,
-    };
+    expr->type = ExprType_Literal;
+    assert(operand->literal.type == ValueType_Number);
+    double value = operand->literal.number;
     switch (expr->unary.op) {
-    case UnaryOp_Negate:
-      result.number = -operand->literal.number;
-      break;
     case UnaryOp_Group:
-      result.number = operand->literal.number;
+      expr->literal = new_number_value(value);
+      break;
+    case UnaryOp_Negate:
+      expr->literal = new_number_value(-value);
       break;
     }
 
-    delete_expr(expr);
-    expr = new_literal_expr(result);
+    delete_expr(operand);
     break;
   }
   case ExprType_Binary: {
@@ -95,26 +94,28 @@ void simplify_expr(Expr *expr) {
     if (lhs->type != ExprType_Literal || rhs->type != ExprType_Literal)
       break;
 
-    Value result = {
-        .type = ValueType_Number,
-    };
-    switch (expr->binary.op) {
-    case BinaryOp_Add:
-      result.number = lhs->literal.number + rhs->literal.number;
-      break;
-    case BinaryOp_Sub:
-      result.number = lhs->literal.number - rhs->literal.number;
-      break;
-    case BinaryOp_Mul:
-      result.number = lhs->literal.number * rhs->literal.number;
-      break;
-    case BinaryOp_Div:
-      result.number = lhs->literal.number / rhs->literal.number;
-      break;
+    expr->type = ExprType_Literal;
+    // lhs & rhs have the same value types
+    if (lhs->literal.type == ValueType_Number) {
+      double lhs_value = lhs->literal.number, rhs_value = rhs->literal.number;
+      switch (expr->binary.op) {
+      case BinaryOp_Add:
+        expr->literal = new_number_value(lhs_value + rhs_value);
+        break;
+      case BinaryOp_Sub:
+        expr->literal = new_number_value(lhs_value - rhs_value);
+        break;
+      case BinaryOp_Mul:
+        expr->literal = new_number_value(lhs_value * rhs_value);
+        break;
+      case BinaryOp_Div:
+        expr->literal = new_number_value(lhs_value / rhs_value);
+        break;
+      }
     }
 
-    delete_expr(expr);
-    expr = new_literal_expr(result);
+    delete_expr(rhs);
+    delete_expr(lhs);
     break;
   }
   }

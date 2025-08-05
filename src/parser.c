@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "bytecode.h"
 #include "expr.h"
 #include "lexer.h"
 #include "value.h"
@@ -8,6 +9,7 @@
 
 typedef struct Parser {
   Lexer lexer;
+  Chunk chunk;
 } Parser;
 
 static Token peek(const Parser *parser) { return lexer_peek(&parser->lexer); }
@@ -66,13 +68,15 @@ BINARY_OP_FN(factor, prefix,
 BINARY_OP_FN(sum, factor,
              token.type == TokenType_Plus || token.type == TokenType_Minus)
 
-void compile_script(const char *source) {
+Chunk compile_script(const char *source) {
   Parser parser = {
       .lexer = new_lexer(source),
+      .chunk = new_chunk(),
   };
 
   Expr *expr = sum(&parser);
-  simplify_expr(expr);
-  assert(expr->type == ExprType_Literal);
-  printf("%f\n", expr->literal.number);
+  // simplify_expr(expr);
+  compile_expr(&parser.chunk, expr);
+
+  return parser.chunk;
 }

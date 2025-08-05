@@ -10,3 +10,7 @@ typedef struct Value {
     double number;
   };
 } Value;
+
+Value new_number_value(double number);
+
+double value_as_number(Value value);

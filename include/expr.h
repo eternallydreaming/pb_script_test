@@ -10,8 +10,8 @@ typedef enum ExprType {
 } ExprType;
 
 typedef enum UnaryOp {
-  UnaryOp_Negate = 0,
-  UnaryOp_Group,
+  UnaryOp_Group = 0,
+  UnaryOp_Negate,
 } UnaryOp;
 
 typedef enum BinaryOp {
