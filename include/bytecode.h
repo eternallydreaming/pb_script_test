@@ -4,15 +4,32 @@
 #include "expr.h"
 
 typedef enum Bytecode {
-  Bytecode_PushF64 = 0,
+  Bytecode_PushNull = 0,
+  Bytecode_PushNumber,
+  Bytecode_PushTrue,
+  Bytecode_PushFalse,
+  Bytecode_Copy,
   Bytecode_Pop,
 
   Bytecode_Negate,
+  Bytecode_Not,
 
   Bytecode_Add,
-  Bytecode_Sub,
-  Bytecode_Mul,
-  Bytecode_Div,
+  Bytecode_Subtract,
+  Bytecode_Multiply,
+  Bytecode_Divide,
+
+  Bytecode_Equal,
+  Bytecode_NotEqual,
+  Bytecode_Less,
+  Bytecode_LessEqual,
+  Bytecode_Greater,
+  Bytecode_GreaterEqual,
+
+  Bytecode_JumpIfFalse,
+  Bytecode_JumpIfTrue,
+  Bytecode_JumpIfFalseRetain,
+  Bytecode_JumpIfTrueRetain,
 } Bytecode;
 
 void compile_expr(Chunk *chunk, const Expr *expr);

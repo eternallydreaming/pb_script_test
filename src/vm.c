@@ -7,12 +7,17 @@
 #include <stdint.h>
 
 static uint8_t read_u8(Vm *vm) { return read_chunk_u8(vm->chunk, &vm->pc); }
-static uint64_t read_u64(Vm *vm) { return read_chunk_u64(vm->chunk, &vm->pc); }
+static uint16_t read_u16(Vm *vm) { return read_chunk_u16(vm->chunk, &vm->pc); }
 static double read_f64(Vm *vm) { return read_chunk_f64(vm->chunk, &vm->pc); }
 
 static void push(Vm *vm, Value value) {
   assert(vm->sp < 128);
   vm->stack[vm->sp++] = value;
+}
+
+static Value peek(const Vm *vm) {
+  assert(vm->sp != 0);
+  return vm->stack[vm->sp - 1];
 }
 
 static Value pop(Vm *vm) {
@@ -29,22 +34,36 @@ Vm new_vm(const Chunk *chunk) {
   };
 }
 
-double run_vm(Vm *vm) {
-#define BINARY_OP(op)                                                          \
-  do {                                                                         \
+Value run_vm(Vm *vm) {
+#define BINARY_OP(enum_name, op, result_type)                                  \
+  case Bytecode_##enum_name: {                                                 \
     double rhs = value_as_number(pop(vm));                                     \
     double lhs = value_as_number(pop(vm));                                     \
                                                                                \
-    push(vm, new_number_value(lhs op rhs));                                    \
-  } while (0)
+    push(vm, new_##result_type##_value(lhs op rhs));                           \
+    break;                                                                     \
+  }
 
   while (vm->pc < vm->chunk->size) {
-    Bytecode code = read_u8(vm);
-    switch (code) {
-    case Bytecode_PushF64:
+    Bytecode instruction = read_u8(vm);
+    switch (instruction) {
+    case Bytecode_PushNull:
+      push(vm, new_null_value());
+      break;
+    case Bytecode_PushNumber:
       push(vm, new_number_value(read_f64(vm)));
       break;
+    case Bytecode_PushTrue:
+      push(vm, new_boolean_value(true));
+      break;
+    case Bytecode_PushFalse:
+      push(vm, new_boolean_value(false));
+      break;
+    case Bytecode_Copy:
+      push(vm, copy_value(peek(vm)));
+      break;
     case Bytecode_Pop:
+      pop(vm);
       break;
 
     case Bytecode_Negate: {
@@ -52,21 +71,66 @@ double run_vm(Vm *vm) {
       push(vm, new_number_value(-operand));
       break;
     }
+    case Bytecode_Not: {
+      bool operand = value_as_boolean(pop(vm));
+      push(vm, new_boolean_value(!operand));
+      break;
+    }
 
-    case Bytecode_Add:
-      BINARY_OP(+);
+      BINARY_OP(Add, +, number)
+      BINARY_OP(Subtract, -, number)
+      BINARY_OP(Multiply, *, number)
+      BINARY_OP(Divide, /, number)
+
+    case Bytecode_Equal: {
+      Value rhs = pop(vm);
+      Value lhs = pop(vm);
+      push(vm, new_boolean_value(value_compare(lhs, rhs)));
       break;
-    case Bytecode_Sub:
-      BINARY_OP(-);
+    }
+    case Bytecode_NotEqual: {
+      Value rhs = pop(vm);
+      Value lhs = pop(vm);
+      push(vm, new_boolean_value(!value_compare(lhs, rhs)));
       break;
-    case Bytecode_Mul:
-      BINARY_OP(*);
+    }
+      BINARY_OP(Less, <, boolean)
+      BINARY_OP(LessEqual, <=, boolean)
+      BINARY_OP(Greater, >, boolean)
+      BINARY_OP(GreaterEqual, >=, boolean)
+
+    case Bytecode_JumpIfFalse: {
+      uint16_t offset = read_u16(vm);
+      if (!value_as_boolean(pop(vm)))
+        vm->pc += offset;
       break;
-    case Bytecode_Div:
-      BINARY_OP(/);
+    }
+    case Bytecode_JumpIfTrue: {
+      uint16_t offset = read_u16(vm);
+      if (value_as_boolean(pop(vm)))
+        vm->pc += offset;
       break;
+    }
+    case Bytecode_JumpIfFalseRetain: {
+      uint16_t offset = read_u16(vm);
+      if (!value_as_boolean(peek(vm)))
+        vm->pc += offset;
+      else
+        pop(vm);
+      break;
+    }
+    case Bytecode_JumpIfTrueRetain: {
+      uint16_t offset = read_u16(vm);
+      if (value_as_boolean(peek(vm)))
+        vm->pc += offset;
+      else
+        pop(vm);
+      break;
+    }
     }
   }
 
-  return value_as_number(pop(vm));
+  while (vm->sp > 1)
+    pop(vm);
+  return pop(vm);
 }

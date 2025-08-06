@@ -6,10 +6,28 @@ typedef enum TokenType {
   TokenType_Error = -1,
   TokenType_Eof = 0,
 
+  TokenType_LParen,
+  TokenType_RParen,
+
+  TokenType_Bang,
   TokenType_Plus,
   TokenType_Minus,
   TokenType_Star,
   TokenType_Slash,
+
+  TokenType_Equal,
+  TokenType_NotEqual,
+  TokenType_Less,
+  TokenType_LessEqual,
+  TokenType_Greater,
+  TokenType_GreaterEqual,
+
+  TokenType_And,
+  TokenType_Or,
+
+  TokenType_Null,
+  TokenType_True,
+  TokenType_False,
 
   TokenType_Number,
   TokenType_String,
@@ -28,7 +46,6 @@ typedef struct Token {
 
 typedef struct Lexer {
   const char *source;
-  size_t source_len;
   size_t pos;
 
   Token token;

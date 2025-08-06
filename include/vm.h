@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bytecode.h"
+#include "chunk.h"
 #include "value.h"
 #include <stddef.h>
 
@@ -13,4 +13,4 @@ typedef struct Vm {
 
 Vm new_vm(const Chunk *chunk);
 
-double run_vm(Vm *vm);
+Value run_vm(Vm *vm);
