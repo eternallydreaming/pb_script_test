@@ -51,6 +51,19 @@ Expr *new_literal_expr(Value value) {
   return expr;
 }
 
+Expr *new_get_var_expr(size_t idx, ValueType value_type) {
+  Expr *expr = new_expr(ExprType_GetVar, value_type);
+  expr->get_var.idx = idx;
+  return expr;
+}
+
+Expr *new_set_var_expr(size_t idx, Expr *value) {
+  Expr *expr = new_expr(ExprType_SetVar, value->value_type);
+  expr->set_var.idx = idx;
+  expr->set_var.value = value;
+  return expr;
+}
+
 Expr *new_unary_expr(UnaryOp op, Expr *operand) {
   Expr *expr = new_expr(ExprType_Unary, operand->value_type);
   expr->unary.op = op;
@@ -71,7 +84,12 @@ Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs) {
 void delete_expr(Expr *expr) {
   switch (expr->type) {
   case ExprType_Literal:
+  case ExprType_GetVar:
     break;
+  case ExprType_SetVar:
+    delete_expr(expr->set_var.value);
+    break;
+
   case ExprType_Unary:
     delete_expr(expr->unary.operand);
     break;
@@ -86,7 +104,12 @@ void delete_expr(Expr *expr) {
 void simplify_expr(Expr *expr) {
   switch (expr->type) {
   case ExprType_Literal:
+  case ExprType_GetVar:
     break;
+  case ExprType_SetVar:
+    simplify_expr(expr->set_var.value);
+    break;
+
   case ExprType_Unary: {
     simplify_expr(expr->unary.operand);
     Expr *operand = expr->unary.operand;

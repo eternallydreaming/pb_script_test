@@ -5,6 +5,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct Keyword {
+  const char *text;
+  TokenType type;
+  LexerContext context;
+} Keyword;
+
+// clang-format off
+static Keyword KEYWORDS[] = {
+    {"null",  TokenType_Null,  LexerContext_None},
+    {"true",  TokenType_True,  LexerContext_None},
+    {"false", TokenType_False, LexerContext_None},
+    {"let",   TokenType_Let,   LexerContext_None},
+    {"if",    TokenType_If,    LexerContext_None},
+    {"else",  TokenType_Else,  LexerContext_None},
+    {"while", TokenType_While, LexerContext_None},
+    {"for",   TokenType_For,   LexerContext_None},
+    {"in",    TokenType_In,    LexerContext_For},
+    {"by",    TokenType_By,    LexerContext_For},
+    {NULL, 0, 0},
+};
+// clang-format on
+
 static char peek(const Lexer *lexer) { return lexer->source[lexer->pos]; }
 
 static char advance(Lexer *lexer) {
@@ -38,6 +60,16 @@ static Token emit_number(Lexer *lexer, TokenType type, double number) {
   return lexer->token;
 }
 
+static Token emit_text(Lexer *lexer, TokenType type, size_t start_pos,
+                       size_t len) {
+  lexer->token = (Token){
+      .type = type,
+      .text.start = lexer->source + start_pos,
+      .text.len = len,
+  };
+  return lexer->token;
+}
+
 static Token read_number(Lexer *lexer) {
   size_t start_pos = lexer->pos - 1;
   while (isdigit(peek(lexer)))
@@ -59,20 +91,28 @@ static Token read_identifier(Lexer *lexer) {
     advance(lexer);
   size_t len = lexer->pos - start_pos;
 
-  const char *ident = lexer->source + start_pos;
-  if (strncmp(ident, "null", len) == 0)
-    return emit(lexer, TokenType_Null);
-  else if (strncmp(ident, "true", len) == 0)
-    return emit(lexer, TokenType_True);
-  else if (strncmp(ident, "false", len) == 0)
-    return emit(lexer, TokenType_False);
-  abort();
+  for (Keyword *keyword = KEYWORDS; keyword->text != NULL; keyword++) {
+    if (len != strlen(keyword->text))
+      continue;
+    if (memcmp(lexer->source + start_pos, keyword->text, len) == 0) {
+      if (keyword->context != LexerContext_None &&
+          keyword->context != lexer->context) {
+        // context-based keyword that didn't match the current context, treat
+        // this as an identifier
+        break;
+      }
+      return emit(lexer, keyword->type);
+    }
+  }
+  return emit_text(lexer, TokenType_Identifier, start_pos, len);
 }
 
 Lexer new_lexer(const char *source) {
   Lexer lexer = {
       .source = source,
       .pos = 0,
+
+      .context = LexerContext_None,
 
       .token = {},
   };
@@ -96,10 +136,18 @@ Token lexer_advance(Lexer *lexer) {
     return emit(lexer, TokenType_LParen);
   case ')':
     return emit(lexer, TokenType_RParen);
+  case '{':
+    return emit(lexer, TokenType_LBrace);
+  case '}':
+    return emit(lexer, TokenType_RBrace);
 
+  case ';':
+    return emit(lexer, TokenType_Semicolon);
   case '+':
     return emit(lexer, TokenType_Plus);
   case '-':
+    if (match(lexer, '>'))
+      return emit(lexer, TokenType_Arrow);
     return emit(lexer, TokenType_Minus);
   case '*':
     return emit(lexer, TokenType_Star);
@@ -111,10 +159,11 @@ Token lexer_advance(Lexer *lexer) {
       return emit(lexer, TokenType_NotEqual);
     return emit(lexer, TokenType_Bang);
   case '=':
+    if (match(lexer, '>'))
+      return emit(lexer, TokenType_FatArrow);
     if (match(lexer, '='))
       return emit(lexer, TokenType_Equal);
-    exit(-1);
-    break;
+    return emit(lexer, TokenType_Assign);
   case '<':
     if (match(lexer, '='))
       return emit(lexer, TokenType_LessEqual);
@@ -127,13 +176,11 @@ Token lexer_advance(Lexer *lexer) {
   case '&':
     if (match(lexer, '&'))
       return emit(lexer, TokenType_And);
-    exit(-1);
-    break;
+    assert(0);
   case '|':
     if (match(lexer, '|'))
       return emit(lexer, TokenType_Or);
-    exit(-1);
-    break;
+    assert(0);
 
   default:
     if (isdigit(ch))

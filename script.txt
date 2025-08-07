@@ -1,0 +1,4 @@
+let test = 228;
+for i in 10 -> 0 {
+  test = i;
+}

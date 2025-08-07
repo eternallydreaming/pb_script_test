@@ -5,6 +5,9 @@
 
 typedef enum ExprType {
   ExprType_Literal = 0,
+  ExprType_GetVar,
+  ExprType_SetVar,
+
   ExprType_Unary,
   ExprType_Binary,
 } ExprType;
@@ -38,6 +41,14 @@ typedef struct Expr {
   union {
     Value literal;
     struct {
+      size_t idx;
+    } get_var;
+    struct {
+      size_t idx;
+      struct Expr *value;
+    } set_var;
+
+    struct {
       UnaryOp op;
       struct Expr *operand;
     } unary;
@@ -52,6 +63,8 @@ BinaryOp token_to_binary_op(TokenType type);
 
 Expr *new_expr(ExprType type, ValueType value_type);
 Expr *new_literal_expr(Value value);
+Expr *new_get_var_expr(size_t idx, ValueType value_type);
+Expr *new_set_var_expr(size_t idx, Expr *value);
 Expr *new_unary_expr(UnaryOp op, Expr *operand);
 Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs);
 void delete_expr(Expr *expr);

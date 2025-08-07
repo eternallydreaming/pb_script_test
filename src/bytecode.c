@@ -23,6 +23,17 @@ void compile_expr(Chunk *chunk, const Expr *expr) {
       break;
     }
     break;
+  case ExprType_GetVar:
+    write_chunk_u8(chunk, Bytecode_Load);
+    write_chunk_u8(chunk, expr->get_var.idx);
+    break;
+  case ExprType_SetVar:
+    compile_expr(chunk, expr->set_var.value);
+
+    write_chunk_u8(chunk, Bytecode_Store);
+    write_chunk_u8(chunk, expr->set_var.idx);
+    break;
+
   case ExprType_Unary:
     compile_expr(chunk, expr->unary.operand);
 
@@ -124,6 +135,13 @@ void disassemble_chunk(const Chunk *chunk) {
       printf("pop\n");
       break;
 
+    case Bytecode_Load:
+      printf("load $%d\n", read_chunk_u8(chunk, &pos));
+      break;
+    case Bytecode_Store:
+      printf("store $%d\n", read_chunk_u8(chunk, &pos));
+      break;
+
     case Bytecode_Negate:
       printf("negate\n");
       break;
@@ -163,6 +181,12 @@ void disassemble_chunk(const Chunk *chunk) {
       printf("greater_equal\n");
       break;
 
+    case Bytecode_Jump:
+      printf("jump +%d\n", read_chunk_u16(chunk, &pos));
+      break;
+    case Bytecode_JumpBack:
+      printf("jump_back -%d\n", read_chunk_u16(chunk, &pos));
+      break;
     case Bytecode_JumpIfFalse:
       printf("jump_if_false +%d\n", read_chunk_u16(chunk, &pos));
       break;

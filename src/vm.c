@@ -15,10 +15,12 @@ static void push(Vm *vm, Value value) {
   vm->stack[vm->sp++] = value;
 }
 
-static Value peek(const Vm *vm) {
-  assert(vm->sp != 0);
-  return vm->stack[vm->sp - 1];
+static Value peek_at(Vm *vm, size_t idx) {
+  assert(idx < vm->sp);
+  return vm->stack[idx];
 }
+
+static Value peek(Vm *vm) { return peek_at(vm, vm->sp - 1); }
 
 static Value pop(Vm *vm) {
   assert(vm->sp != 0);
@@ -66,6 +68,16 @@ Value run_vm(Vm *vm) {
       pop(vm);
       break;
 
+    case Bytecode_Load:
+      push(vm, peek_at(vm, read_u8(vm)));
+      break;
+    case Bytecode_Store: {
+      uint8_t idx = read_u8(vm);
+      assert(idx < vm->sp);
+      vm->stack[idx] = peek(vm);
+      break;
+    }
+
     case Bytecode_Negate: {
       double operand = value_as_number(pop(vm));
       push(vm, new_number_value(-operand));
@@ -99,6 +111,12 @@ Value run_vm(Vm *vm) {
       BINARY_OP(Greater, >, boolean)
       BINARY_OP(GreaterEqual, >=, boolean)
 
+    case Bytecode_Jump:
+      vm->pc += read_u16(vm);
+      break;
+    case Bytecode_JumpBack:
+      vm->pc -= read_u16(vm);
+      break;
     case Bytecode_JumpIfFalse: {
       uint16_t offset = read_u16(vm);
       if (!value_as_boolean(pop(vm)))
@@ -130,7 +148,6 @@ Value run_vm(Vm *vm) {
     }
   }
 
-  while (vm->sp > 1)
-    pop(vm);
+  assert(vm->sp == 1);
   return pop(vm);
 }

@@ -11,6 +11,9 @@ typedef enum Bytecode {
   Bytecode_Copy,
   Bytecode_Pop,
 
+  Bytecode_Load,
+  Bytecode_Store,
+
   Bytecode_Negate,
   Bytecode_Not,
 
@@ -26,6 +29,8 @@ typedef enum Bytecode {
   Bytecode_Greater,
   Bytecode_GreaterEqual,
 
+  Bytecode_Jump,
+  Bytecode_JumpBack,
   Bytecode_JumpIfFalse,
   Bytecode_JumpIfTrue,
   Bytecode_JumpIfFalseRetain,

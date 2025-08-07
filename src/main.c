@@ -5,7 +5,11 @@
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
-  Chunk chunk = compile_script("4 == 4 && 5 > 2");
+  char source[1024];
+  size_t len = fread(source, 1, sizeof(source) - 1, stdin);
+  source[len] = 0;
+
+  Chunk chunk = compile_script(source);
   disassemble_chunk(&chunk);
   Vm vm = new_vm(&chunk);
   Value result = run_vm(&vm);
