@@ -13,16 +13,18 @@ typedef struct Keyword {
 
 // clang-format off
 static Keyword KEYWORDS[] = {
-    {"null",  TokenType_Null,  LexerContext_None},
-    {"true",  TokenType_True,  LexerContext_None},
-    {"false", TokenType_False, LexerContext_None},
-    {"let",   TokenType_Let,   LexerContext_None},
-    {"if",    TokenType_If,    LexerContext_None},
-    {"else",  TokenType_Else,  LexerContext_None},
-    {"while", TokenType_While, LexerContext_None},
-    {"for",   TokenType_For,   LexerContext_None},
-    {"in",    TokenType_In,    LexerContext_For},
-    {"by",    TokenType_By,    LexerContext_For},
+    {"null",     TokenType_Null,     LexerContext_None},
+    {"true",     TokenType_True,     LexerContext_None},
+    {"false",    TokenType_False,    LexerContext_None},
+    {"let",      TokenType_Let,      LexerContext_None},
+    {"if",       TokenType_If,       LexerContext_None},
+    {"else",     TokenType_Else,     LexerContext_None},
+    {"while",    TokenType_While,    LexerContext_None},
+    {"for",      TokenType_For,      LexerContext_None},
+    {"in",       TokenType_In,       LexerContext_For},
+    {"by",       TokenType_By,       LexerContext_For},
+    {"break",    TokenType_Break,    LexerContext_None},
+    {"continue", TokenType_Continue, LexerContext_None},
     {NULL, 0, 0},
 };
 // clang-format on

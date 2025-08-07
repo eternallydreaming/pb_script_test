@@ -42,6 +42,8 @@ typedef enum TokenType {
   TokenType_For,
   TokenType_In,
   TokenType_By,
+  TokenType_Break,
+  TokenType_Continue,
 
   TokenType_Number,
   TokenType_Identifier,

@@ -12,6 +12,7 @@
 #include <string.h>
 
 enum { MAX_VARS = 128 };
+enum { MAX_LOOP_HOLES = 32 };
 
 typedef enum Symbol {
   Symbol_None = 0,
@@ -23,6 +24,16 @@ typedef struct Var {
   ValueType type;
   size_t block_depth;
 } Var;
+
+typedef struct LoopState {
+  size_t vars_num;
+  // continue
+  size_t start_holes[MAX_LOOP_HOLES];
+  size_t start_holes_num;
+  // break
+  size_t end_holes[MAX_LOOP_HOLES];
+  size_t end_holes_num;
+} LoopState;
 
 typedef struct Parser {
   Lexer lexer;
@@ -77,7 +88,7 @@ static Symbol lookup_symbol(const Parser *parser, const char *name,
 }
 
 static size_t new_var(Parser *parser, const char *name, size_t name_len,
-                      ValueType type) {
+                      ValueType type, LoopState *loop_state) {
   if (parser->vars_num >= MAX_VARS) {
     puts("too many variables");
     exit(-1);
@@ -87,19 +98,29 @@ static size_t new_var(Parser *parser, const char *name, size_t name_len,
     exit(-1);
   }
 
-  parser->vars[parser->vars_num++] = (Var){
+  parser->vars[parser->vars_num] = (Var){
       .name = strndup(name, name_len),
       .type = type,
       .block_depth = parser->block_level,
   };
+  parser->vars_num++;
+  if (loop_state != NULL)
+    loop_state->vars_num++;
+
   return parser->vars_num - 1;
 }
 
-static void pop_var(Parser *parser) {
+static void pop_var(Parser *parser, LoopState *loop_state) {
   assert(parser->vars_num != 0);
 
-  free(parser->vars[parser->vars_num - 1].name);
+  if (loop_state != NULL) {
+    assert(loop_state->vars_num != 0);
+    loop_state->vars_num--;
+  }
   parser->vars_num--;
+  free(parser->vars[parser->vars_num].name);
+
+  // make sure to pop it off the stack as well
   write_chunk_u8(&parser->chunk, Bytecode_Pop);
 }
 
@@ -240,12 +261,12 @@ static void finalize_expr(Parser *parser, Expr *expr) {
   delete_expr(expr);
 }
 
-static void statement(Parser *parser);
+static void statement(Parser *parser, LoopState *loop_state);
 
-static void block(Parser *parser) {
+static void block(Parser *parser, LoopState *loop_state) {
   parser->block_level++;
   while (!is_eof(parser) && peek(parser).type != TokenType_RBrace)
-    statement(parser);
+    statement(parser, loop_state);
   expect(parser, TokenType_RBrace, "expected '}' to close '{'");
 
   // delete variables from this scope
@@ -253,12 +274,12 @@ static void block(Parser *parser) {
     if (parser->vars[parser->vars_num - 1].block_depth != parser->block_level)
       break;
 
-    pop_var(parser);
+    pop_var(parser, loop_state);
   }
   parser->block_level--;
 }
 
-static void if_statement(Parser *parser) {
+static void if_statement(Parser *parser, LoopState *loop_state) {
   Expr *cond = expr_base(parser);
   if (cond->value_type != ValueType_Boolean) {
     puts("if condition must be a boolean");
@@ -271,7 +292,7 @@ static void if_statement(Parser *parser) {
   size_t skip_true_hole = write_chunk_hole(&parser->chunk, 16);
 
   expect(parser, TokenType_LBrace, "expected '{' after if condition");
-  block(parser);
+  block(parser, loop_state);
 
   if (match(parser, TokenType_Else)) {
     // make sure to skip over the false body if the condition is true
@@ -280,7 +301,7 @@ static void if_statement(Parser *parser) {
     patch_chunk_hole_u16(&parser->chunk, skip_true_hole);
 
     expect(parser, TokenType_LBrace, "expected '{' after 'else'");
-    block(parser);
+    block(parser, loop_state);
 
     patch_chunk_hole_u16(&parser->chunk, skip_false_hole);
   } else {
@@ -301,14 +322,21 @@ static void while_statement(Parser *parser) {
   write_chunk_u8(&parser->chunk, Bytecode_JumpIfFalse);
   size_t skip_body_hole = write_chunk_hole(&parser->chunk, 16);
 
+  LoopState loop_state = {0};
   expect(parser, TokenType_LBrace, "expected '{' after while condition");
-  block(parser);
+  block(parser, &loop_state);
+
   // back to the condition
+  for (size_t i = 0; i < loop_state.start_holes_num; i++)
+    patch_chunk_hole_u16(&parser->chunk, loop_state.start_holes[i]);
+
   write_chunk_u8(&parser->chunk, Bytecode_JumpBack);
   write_chunk_u16(&parser->chunk,
                   parser->chunk.size - cond_pos + sizeof(uint16_t));
 
   patch_chunk_hole_u16(&parser->chunk, skip_body_hole);
+  for (size_t i = 0; i < loop_state.end_holes_num; i++)
+    patch_chunk_hole_u16(&parser->chunk, loop_state.end_holes[i]);
 }
 
 static void for_statement(Parser *parser) {
@@ -365,7 +393,7 @@ static void for_statement(Parser *parser) {
   set_context(parser, LexerContext_None);
 
   size_t counter_idx = new_var(parser, counter_token.text.start,
-                               counter_token.text.len, ValueType_Number);
+                               counter_token.text.len, ValueType_Number, NULL);
 
   // init
   finalize_expr(parser, from);
@@ -387,10 +415,14 @@ static void for_statement(Parser *parser) {
   size_t skip_body_hole = write_chunk_hole(&parser->chunk, 16);
 
   // body
+  LoopState loop_state = {0};
   expect(parser, TokenType_LBrace, "expected '{' after to expression");
-  block(parser);
+  block(parser, &loop_state);
 
   // increment
+  for (size_t i = 0; i < loop_state.start_holes_num; i++)
+    patch_chunk_hole_u16(&parser->chunk, loop_state.start_holes[i]);
+
   write_chunk_u8(&parser->chunk, Bytecode_Load);
   write_chunk_u8(&parser->chunk, counter_idx);
   write_chunk_u8(&parser->chunk, Bytecode_PushNumber);
@@ -405,36 +437,67 @@ static void for_statement(Parser *parser) {
                   parser->chunk.size - cond_pos + sizeof(uint16_t));
 
   patch_chunk_hole_u16(&parser->chunk, skip_body_hole);
+  for (size_t i = 0; i < loop_state.end_holes_num; i++)
+    patch_chunk_hole_u16(&parser->chunk, loop_state.end_holes[i]);
 
   // ..and make sure to get rid of the counter variable
-  pop_var(parser);
+  pop_var(parser, NULL);
 }
 
-static void var_decl(Parser *parser) {
+#define LOOP_INTERRUPT_STATEMENT(name, field_prefix)                           \
+  static void name##_statement(Parser *parser, LoopState *loop_state) {        \
+    if (loop_state == NULL) {                                                  \
+      puts("a " #name " statement must be placed inside a loop");              \
+      exit(-1);                                                                \
+    }                                                                          \
+    if (loop_state->field_prefix##_holes_num >= MAX_LOOP_HOLES) {              \
+      puts("too many " #name " statements within loop");                       \
+      exit(-1);                                                                \
+    }                                                                          \
+                                                                               \
+    for (size_t i = 0; i < loop_state->vars_num; i++)                          \
+      write_chunk_u8(&parser->chunk, Bytecode_Pop);                            \
+                                                                               \
+    write_chunk_u8(&parser->chunk, Bytecode_Jump);                             \
+    size_t hole = write_chunk_hole(&parser->chunk, 16);                        \
+    loop_state->field_prefix##_holes[loop_state->field_prefix##_holes_num++] = \
+        hole;                                                                  \
+                                                                               \
+    expect(parser, TokenType_Semicolon, "expected ';' after '" #name "'");     \
+  }
+
+LOOP_INTERRUPT_STATEMENT(break, end)
+LOOP_INTERRUPT_STATEMENT(continue, start)
+
+static void var_decl(Parser *parser, LoopState *loop_state) {
   Token name_token =
       expect(parser, TokenType_Identifier, "expected identifier after 'let'");
   expect(parser, TokenType_Assign, "expected '=' after identifier");
 
   Expr *value = expr_base(parser);
-  new_var(parser, name_token.text.start, name_token.text.len,
-          value->value_type);
+  new_var(parser, name_token.text.start, name_token.text.len, value->value_type,
+          loop_state);
   finalize_expr(parser, value);
 
   expect(parser, TokenType_Semicolon,
          "expected ';' after variable declaration");
 }
 
-static void statement(Parser *parser) {
+static void statement(Parser *parser, LoopState *loop_state) {
   if (match(parser, TokenType_If)) {
-    if_statement(parser);
+    if_statement(parser, loop_state);
   } else if (match(parser, TokenType_While)) {
     while_statement(parser);
   } else if (match(parser, TokenType_For)) {
     for_statement(parser);
+  } else if (match(parser, TokenType_Break)) {
+    break_statement(parser, loop_state);
+  } else if (match(parser, TokenType_Continue)) {
+    continue_statement(parser, loop_state);
   } else if (match(parser, TokenType_Let)) {
-    var_decl(parser);
+    var_decl(parser, loop_state);
   } else if (match(parser, TokenType_LBrace)) {
-    block(parser);
+    block(parser, loop_state);
   } else {
     // expression
     finalize_expr(parser, expr_base(parser));
@@ -456,6 +519,6 @@ Chunk compile_script(const char *source) {
   };
 
   while (!is_eof(&parser))
-    statement(&parser);
+    statement(&parser, NULL);
   return parser.chunk;
 }
