@@ -1,4 +1,4 @@
 let does_it = "yo,";
-for i in 1 => 10 {
-  does_it = does_it + " concat works!";
+if does_it == "yo," {
+  does_it = "bye";
 }

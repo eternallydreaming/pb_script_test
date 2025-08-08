@@ -109,12 +109,18 @@ Value run_vm(Vm *vm) {
       Value rhs = pop(vm);
       Value lhs = pop(vm);
       push(vm, new_boolean_value(value_compare(lhs, rhs)));
+
+      release_value(rhs);
+      release_value(lhs);
       break;
     }
     case Bytecode_NotEqual: {
       Value rhs = pop(vm);
       Value lhs = pop(vm);
       push(vm, new_boolean_value(!value_compare(lhs, rhs)));
+
+      release_value(rhs);
+      release_value(lhs);
       break;
     }
       BINARY_OP(Less, <, boolean)
