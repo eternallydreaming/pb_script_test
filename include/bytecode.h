@@ -8,6 +8,7 @@ typedef enum Bytecode {
   Bytecode_PushNumber,
   Bytecode_PushTrue,
   Bytecode_PushFalse,
+  Bytecode_PushString,
   Bytecode_Copy,
   Bytecode_Pop,
 
@@ -28,6 +29,8 @@ typedef enum Bytecode {
   Bytecode_LessEqual,
   Bytecode_Greater,
   Bytecode_GreaterEqual,
+
+  Bytecode_Concat,
 
   Bytecode_Jump,
   Bytecode_JumpBack,

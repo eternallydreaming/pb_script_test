@@ -23,6 +23,10 @@ int main(int argc, char *argv[]) {
   case ValueType_Boolean:
     printf("result: %s\n", (result.boolean) ? "true" : "false");
     break;
+  case ValueType_String:
+    printf("result: \"%s\"\n", result.string->chars);
+    break;
   }
+  printf("alive values: %u\n", get_active_values());
   return 0;
 }

@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -72,7 +73,7 @@ static Token emit_text(Lexer *lexer, TokenType type, size_t start_pos,
   return lexer->token;
 }
 
-static Token read_number(Lexer *lexer) {
+static Token number(Lexer *lexer) {
   size_t start_pos = lexer->pos - 1;
   while (isdigit(peek(lexer)))
     advance(lexer);
@@ -87,7 +88,20 @@ static Token read_number(Lexer *lexer) {
   return emit_number(lexer, TokenType_Number, atof(lexer->source + start_pos));
 }
 
-static Token read_identifier(Lexer *lexer) {
+static Token string(Lexer *lexer) {
+  size_t start_pos = lexer->pos;
+  while (peek(lexer) != '\r' && peek(lexer) != '\n' && peek(lexer) != '"')
+    advance(lexer);
+  size_t len = lexer->pos - start_pos;
+  if (!match(lexer, '"')) {
+    puts("expected '\"' to close '\"'");
+    exit(-1);
+  }
+
+  return emit_text(lexer, TokenType_String, start_pos, len);
+}
+
+static Token identifier(Lexer *lexer) {
   size_t start_pos = lexer->pos - 1;
   while (isalnum(peek(lexer)) || peek(lexer) == '_')
     advance(lexer);
@@ -184,11 +198,14 @@ Token lexer_advance(Lexer *lexer) {
       return emit(lexer, TokenType_Or);
     assert(0);
 
+  case '"':
+    return string(lexer);
+
   default:
     if (isdigit(ch))
-      return read_number(lexer);
+      return number(lexer);
     else if (isalpha(ch) || ch == '_')
-      return read_identifier(lexer);
+      return identifier(lexer);
     return emit(lexer, TokenType_Error);
   }
 }

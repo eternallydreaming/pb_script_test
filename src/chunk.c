@@ -7,13 +7,41 @@
 
 Chunk new_chunk() {
   return (Chunk){
+      .strings_num = 0,
+      .strings = NULL,
+
       .size = 0,
       .cap = 0,
       .code = NULL,
   };
 }
 
-void delete_chunk(Chunk *chunk) { free(chunk->code); }
+void delete_chunk(Chunk *chunk) {
+  for (size_t i = 0; i < chunk->strings_num; i++)
+    free(chunk->strings[i].chars);
+  free(chunk->strings);
+  free(chunk->code);
+}
+
+size_t add_chunk_string(Chunk *chunk, const char *chars, uint32_t len) {
+  for (size_t i = 0; i < chunk->strings_num; i++) {
+    if (strncmp(chunk->strings[i].chars, chars, len) == 0)
+      return i; // already exists
+  }
+
+  chunk->strings = realloc(chunk->strings,
+                           (chunk->strings_num + 1) * sizeof(*chunk->strings));
+  assert(chunk->strings != NULL);
+
+  char *chars_copy = strndup(chars, len);
+  assert(chars_copy != NULL);
+  chunk->strings[chunk->strings_num++] = (ChunkString){
+      .len = len,
+      .chars = chars_copy,
+  };
+
+  return chunk->strings_num - 1;
+}
 
 #define READ_CHUNK_FN(T, postfix)                                              \
   T read_chunk_##postfix(const Chunk *chunk, size_t *pos) {                    \

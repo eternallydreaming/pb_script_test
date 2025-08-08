@@ -98,8 +98,10 @@ static size_t new_var(Parser *parser, const char *name, size_t name_len,
     exit(-1);
   }
 
+  char *name_copy = strndup(name, name_len);
+  assert(name_copy != NULL);
   parser->vars[parser->vars_num] = (Var){
-      .name = strndup(name, name_len),
+      .name = name_copy,
       .type = type,
       .block_depth = parser->block_level,
   };
@@ -142,6 +144,9 @@ static Expr *primary(Parser *parser) {
   case TokenType_Number:
     advance(parser);
     return new_literal_expr(new_number_value(token.number));
+  case TokenType_String:
+    advance(parser);
+    return new_literal_expr(new_string_value(token.text.start, token.text.len));
   case TokenType_Identifier: {
     advance(parser);
     size_t sym_idx;
@@ -189,19 +194,22 @@ static Expr *prefix(Parser *parser) {
   return primary(parser);
 }
 
-static bool check_numbers(Expr *lhs, Expr *rhs) {
-  return lhs->value_type == ValueType_Number &&
-         rhs->value_type == ValueType_Number;
+static bool check_numbers(BinaryOp op, ValueType lhs, ValueType rhs) {
+  return lhs == ValueType_Number && rhs == ValueType_Number;
 }
 
-static bool check_equality(Expr *lhs, Expr *rhs) {
-  return lhs->value_type == rhs->value_type ||
-         lhs->value_type == ValueType_Null || rhs->value_type == ValueType_Null;
+static bool check_addition(BinaryOp op, ValueType lhs, ValueType rhs) {
+  if (op == BinaryOp_Add && lhs == ValueType_String && rhs == ValueType_String)
+    return true;
+  return check_numbers(op, lhs, rhs);
 }
 
-static bool check_booleans(Expr *lhs, Expr *rhs) {
-  return lhs->value_type == ValueType_Boolean &&
-         rhs->value_type == ValueType_Boolean;
+static bool check_equality(BinaryOp op, ValueType lhs, ValueType rhs) {
+  return lhs == rhs || lhs == ValueType_Null || rhs == ValueType_Null;
+}
+
+static bool check_booleans(BinaryOp op, ValueType lhs, ValueType rhs) {
+  return lhs == ValueType_Boolean && rhs == ValueType_Boolean;
 }
 
 #define BINARY_OP_FN(name, next_fn, check_fn, cond)                            \
@@ -211,8 +219,9 @@ static bool check_booleans(Expr *lhs, Expr *rhs) {
     Token token = peek(parser);                                                \
     while (cond) {                                                             \
       advance(parser);                                                         \
+      BinaryOp op = token_to_binary_op(token.type);                            \
       Expr *rhs = next_fn(parser);                                             \
-      if (!check_fn(lhs, rhs)) {                                               \
+      if (!check_fn(op, lhs->value_type, rhs->value_type)) {                   \
         puts("invalid binary operation");                                      \
         exit(-1);                                                              \
       }                                                                        \
@@ -226,7 +235,7 @@ static bool check_booleans(Expr *lhs, Expr *rhs) {
 
 BINARY_OP_FN(factor, prefix, check_numbers,
              token.type == TokenType_Star || token.type == TokenType_Slash)
-BINARY_OP_FN(sum, factor, check_numbers,
+BINARY_OP_FN(sum, factor, check_addition,
              token.type == TokenType_Plus || token.type == TokenType_Minus)
 BINARY_OP_FN(rel_test, sum, check_numbers,
              token.type == TokenType_Less ||

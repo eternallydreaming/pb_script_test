@@ -1,7 +1,4 @@
-let test = 0;
-while true {
-  if test >= 5 {
-    break;
-  }
-  test = test + 1;
+let does_it = "yo,";
+for i in 1 => 10 {
+  does_it = does_it + " concat works!";
 }

@@ -84,6 +84,8 @@ Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs) {
 void delete_expr(Expr *expr) {
   switch (expr->type) {
   case ExprType_Literal:
+    release_value(expr->literal);
+    break;
   case ExprType_GetVar:
     break;
   case ExprType_SetVar:
@@ -141,8 +143,13 @@ void simplify_expr(Expr *expr) {
     expr->type = ExprType_Literal;
     switch (expr->binary.op) {
     case BinaryOp_Add:
-      expr->literal =
-          new_number_value(value_as_number(lhs) + value_as_number(rhs));
+      if (lhs.type == ValueType_Number) {
+        expr->literal =
+            new_number_value(value_as_number(lhs) + value_as_number(rhs));
+      } else {
+        // string concat?
+        expr->literal = value_concat(lhs, rhs);
+      }
       break;
     case BinaryOp_Subtract:
       expr->literal =

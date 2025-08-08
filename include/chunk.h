@@ -3,13 +3,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct ChunkString {
+  uint32_t len;
+  char *chars;
+} ChunkString;
+
 typedef struct Chunk {
+  size_t strings_num;
+  ChunkString *strings;
+
   size_t size, cap;
   uint8_t *code;
 } Chunk;
 
 Chunk new_chunk();
 void delete_chunk(Chunk *chunk);
+
+size_t add_chunk_string(Chunk *chunk, const char *chars, uint32_t len);
 
 int8_t read_chunk_i8(const Chunk *chunk, size_t *pos);
 uint8_t read_chunk_u8(const Chunk *chunk, size_t *pos);

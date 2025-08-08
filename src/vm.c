@@ -61,20 +61,31 @@ Value run_vm(Vm *vm) {
     case Bytecode_PushFalse:
       push(vm, new_boolean_value(false));
       break;
+    case Bytecode_PushString: {
+      uint16_t idx = read_u16(vm);
+      assert(idx < vm->chunk->strings_num);
+      ChunkString string = vm->chunk->strings[idx];
+      push(vm, new_string_value(string.chars, string.len));
+      break;
+    }
     case Bytecode_Copy:
       push(vm, copy_value(peek(vm)));
       break;
     case Bytecode_Pop:
-      pop(vm);
+      release_value(pop(vm));
       break;
 
-    case Bytecode_Load:
-      push(vm, peek_at(vm, read_u8(vm)));
+    case Bytecode_Load: {
+      Value value = peek_at(vm, read_u8(vm));
+      push(vm, copy_value(value));
       break;
+    }
     case Bytecode_Store: {
       uint8_t idx = read_u8(vm);
       assert(idx < vm->sp);
-      vm->stack[idx] = peek(vm);
+
+      release_value(vm->stack[idx]);
+      vm->stack[idx] = copy_value(peek(vm));
       break;
     }
 
@@ -110,6 +121,16 @@ Value run_vm(Vm *vm) {
       BINARY_OP(LessEqual, <=, boolean)
       BINARY_OP(Greater, >, boolean)
       BINARY_OP(GreaterEqual, >=, boolean)
+
+    case Bytecode_Concat: {
+      Value rhs = pop(vm);
+      Value lhs = pop(vm);
+
+      push(vm, value_concat(lhs, rhs));
+      release_value(rhs);
+      release_value(lhs);
+      break;
+    }
 
     case Bytecode_Jump:
       vm->pc += read_u16(vm);
