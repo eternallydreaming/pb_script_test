@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "utility.h"
 #include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
@@ -13,7 +14,7 @@ typedef struct Keyword {
 } Keyword;
 
 // clang-format off
-static Keyword KEYWORDS[] = {
+static const Keyword KEYWORDS[] = {
     {"null",     TokenType_Null,     LexerContext_None},
     {"true",     TokenType_True,     LexerContext_None},
     {"false",    TokenType_False,    LexerContext_None},
@@ -107,10 +108,9 @@ static Token identifier(Lexer *lexer) {
     advance(lexer);
   size_t len = lexer->pos - start_pos;
 
-  for (Keyword *keyword = KEYWORDS; keyword->text != NULL; keyword++) {
-    if (len != strlen(keyword->text))
-      continue;
-    if (memcmp(lexer->source + start_pos, keyword->text, len) == 0) {
+  for (const Keyword *keyword = KEYWORDS; keyword->text != NULL; keyword++) {
+    if (compare_string(lexer->source + start_pos, len, keyword->text,
+                       strlen(keyword->text))) {
       if (keyword->context != LexerContext_None &&
           keyword->context != lexer->context) {
         // context-based keyword that didn't match the current context, treat
@@ -156,9 +156,24 @@ Token lexer_advance(Lexer *lexer) {
     return emit(lexer, TokenType_LBrace);
   case '}':
     return emit(lexer, TokenType_RBrace);
+  case '[':
+    return emit(lexer, TokenType_LBracket);
+  case ']':
+    return emit(lexer, TokenType_RBracket);
 
+  case '.':
+    if (isdigit(peek(lexer)))
+      return number(lexer);
+    if (match(lexer, '.')) {
+      if (match(lexer, '.'))
+        return emit(lexer, TokenType_TripleDot);
+    }
+    assert(0);
+  case ',':
+    return emit(lexer, TokenType_Comma);
   case ';':
     return emit(lexer, TokenType_Semicolon);
+
   case '+':
     return emit(lexer, TokenType_Plus);
   case '-':

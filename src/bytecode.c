@@ -1,6 +1,8 @@
 #include "bytecode.h"
 #include "chunk.h"
 #include "expr.h"
+#include "registry.h"
+#include "type_def.h"
 #include "value.h"
 #include <assert.h>
 #include <stddef.h>
@@ -11,6 +13,9 @@ void compile_expr(Chunk *chunk, const Expr *expr) {
   switch (expr->type) {
   case ExprType_Literal:
     switch (expr->literal.type) {
+    case ValueType_Error:
+    case ValueType_Void:
+      assert(0);
     case ValueType_Null:
       write_chunk_u8(chunk, Bytecode_PushNull);
       break;
@@ -42,6 +47,19 @@ void compile_expr(Chunk *chunk, const Expr *expr) {
     write_chunk_u8(chunk, expr->set_var.idx);
     break;
 
+  case ExprType_NativeCall: {
+    uint8_t argc = 0;
+    for (Expr *arg = expr->call.argv_head; arg != NULL; arg = arg->next) {
+      compile_expr(chunk, arg);
+      argc++;
+    }
+
+    write_chunk_u8(chunk, Bytecode_NativeCall);
+    write_chunk_u16(chunk, expr->call.idx);
+    write_chunk_u8(chunk, argc);
+    break;
+  }
+
   case ExprType_Unary:
     compile_expr(chunk, expr->unary.operand);
 
@@ -64,7 +82,7 @@ void compile_expr(Chunk *chunk, const Expr *expr) {
     switch (expr->binary.op) {
     case BinaryOp_Add:
       // special bytecode for adding strings
-      if (expr->binary.lhs->value_type == ValueType_String)
+      if (is_type_def_string(expr->binary.lhs->return_type))
         write_chunk_u8(chunk, Bytecode_Concat);
       else
         write_chunk_u8(chunk, Bytecode_Add);
@@ -121,7 +139,7 @@ void compile_expr(Chunk *chunk, const Expr *expr) {
   }
 }
 
-void disassemble_chunk(const Chunk *chunk) {
+void disassemble_chunk(const Chunk *chunk, const Registry *registry) {
   size_t pos = 0;
   while (pos < chunk->size) {
     printf("%zu\t| ", pos);
@@ -159,6 +177,15 @@ void disassemble_chunk(const Chunk *chunk) {
     case Bytecode_Store:
       printf("store $%d\n", read_chunk_u8(chunk, &pos));
       break;
+
+    case Bytecode_NativeCall: {
+      uint16_t idx = read_chunk_u16(chunk, &pos);
+      assert(idx < registry->native_fns_num);
+      uint8_t argc = read_chunk_u8(chunk, &pos);
+      printf("native_call %s (%d args)\n", registry->native_fns[idx].name,
+             argc);
+      break;
+    }
 
     case Bytecode_Negate:
       printf("negate\n");

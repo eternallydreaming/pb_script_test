@@ -2,6 +2,7 @@
 
 #include "chunk.h"
 #include "expr.h"
+#include "registry.h"
 
 typedef enum Bytecode {
   Bytecode_PushNull = 0,
@@ -14,6 +15,8 @@ typedef enum Bytecode {
 
   Bytecode_Load,
   Bytecode_Store,
+
+  Bytecode_NativeCall,
 
   Bytecode_Negate,
   Bytecode_Not,
@@ -41,4 +44,4 @@ typedef enum Bytecode {
 } Bytecode;
 
 void compile_expr(Chunk *chunk, const Expr *expr);
-void disassemble_chunk(const Chunk *chunk);
+void disassemble_chunk(const Chunk *chunk, const Registry *registry);

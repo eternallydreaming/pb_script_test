@@ -10,8 +10,13 @@ typedef enum TokenType {
   TokenType_RParen,
   TokenType_LBrace,
   TokenType_RBrace,
+  TokenType_LBracket,
+  TokenType_RBracket,
 
+  TokenType_TripleDot,
+  TokenType_Comma,
   TokenType_Semicolon,
+
   TokenType_Plus,
   TokenType_Minus,
   TokenType_Arrow,

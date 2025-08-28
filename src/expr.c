@@ -1,5 +1,6 @@
 #include "expr.h"
 #include "lexer.h"
+#include "type_def.h"
 #include "value.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -37,44 +38,52 @@ BinaryOp token_to_binary_op(TokenType type) {
   }
 }
 
-Expr *new_expr(ExprType type, ValueType value_type) {
+Expr *new_expr(ExprType type, TypeDef return_type) {
   Expr *expr = malloc(sizeof(*expr));
   assert(expr != NULL);
   expr->type = type;
-  expr->value_type = value_type;
+  expr->return_type = return_type;
+  expr->next = NULL;
   return expr;
 }
 
 Expr *new_literal_expr(Value value) {
-  Expr *expr = new_expr(ExprType_Literal, value.type);
+  Expr *expr = new_expr(ExprType_Literal, new_type_def(value.type, false));
   expr->literal = value;
   return expr;
 }
 
-Expr *new_get_var_expr(size_t idx, ValueType value_type) {
-  Expr *expr = new_expr(ExprType_GetVar, value_type);
+Expr *new_get_var_expr(size_t idx, TypeDef type) {
+  Expr *expr = new_expr(ExprType_GetVar, type);
   expr->get_var.idx = idx;
   return expr;
 }
 
 Expr *new_set_var_expr(size_t idx, Expr *value) {
-  Expr *expr = new_expr(ExprType_SetVar, value->value_type);
+  Expr *expr = new_expr(ExprType_SetVar, value->return_type);
   expr->set_var.idx = idx;
   expr->set_var.value = value;
   return expr;
 }
 
+Expr *new_native_call_expr(size_t idx, TypeDef return_type, Expr *argv_head) {
+  Expr *expr = new_expr(ExprType_NativeCall, return_type);
+  expr->call.idx = idx;
+  expr->call.argv_head = argv_head;
+  return expr;
+}
+
 Expr *new_unary_expr(UnaryOp op, Expr *operand) {
-  Expr *expr = new_expr(ExprType_Unary, operand->value_type);
+  Expr *expr = new_expr(ExprType_Unary, operand->return_type);
   expr->unary.op = op;
   expr->unary.operand = operand;
   return expr;
 }
 
 Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs) {
-  Expr *expr = new_expr(ExprType_Binary, lhs->value_type);
+  Expr *expr = new_expr(ExprType_Binary, lhs->return_type);
   if (op >= BinaryOp_Equal)
-    expr->value_type = ValueType_Boolean;
+    expr->return_type = TypeDef_Boolean;
   expr->binary.op = op;
   expr->binary.lhs = lhs;
   expr->binary.rhs = rhs;
@@ -82,6 +91,9 @@ Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs) {
 }
 
 void delete_expr(Expr *expr) {
+  if (expr->next != NULL)
+    delete_expr(expr->next);
+
   switch (expr->type) {
   case ExprType_Literal:
     release_value(expr->literal);
@@ -90,6 +102,11 @@ void delete_expr(Expr *expr) {
     break;
   case ExprType_SetVar:
     delete_expr(expr->set_var.value);
+    break;
+
+  case ExprType_NativeCall:
+    if (expr->call.argv_head != NULL)
+      delete_expr(expr->call.argv_head);
     break;
 
   case ExprType_Unary:
@@ -110,6 +127,11 @@ void simplify_expr(Expr *expr) {
     break;
   case ExprType_SetVar:
     simplify_expr(expr->set_var.value);
+    break;
+
+  case ExprType_NativeCall:
+    for (Expr *arg = expr->call.argv_head; arg != NULL; arg = arg->next)
+      simplify_expr(arg);
     break;
 
   case ExprType_Unary: {

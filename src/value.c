@@ -1,4 +1,5 @@
 #include "value.h"
+#include "type_def.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -49,6 +50,10 @@ Value new_string_value(const char *chars, uint32_t len) {
   return new_string_value_move(chars_copy, len);
 }
 
+Value new_c_string_value(const char *str) {
+  return new_string_value(str, strlen(str));
+}
+
 void reference_value(Value value) {
   if (is_value_primitive(value))
     return;
@@ -89,6 +94,7 @@ Value copy_value(Value value) {
 
 bool is_value_primitive(Value value) {
   switch (value.type) {
+  case ValueType_Void:
   case ValueType_Null:
   case ValueType_Number:
   case ValueType_Boolean:
@@ -120,7 +126,10 @@ const char *value_as_c_string(Value value) {
 bool value_compare(Value lhs, Value rhs) {
   if (lhs.type != rhs.type)
     return false;
+
   switch (lhs.type) {
+  case ValueType_Error:
+  case ValueType_Void:
   case ValueType_Null:
     return true;
   case ValueType_Number:

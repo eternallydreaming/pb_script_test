@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bytecode.h"
-#include "lexer.h"
+#include "chunk.h"
+#include "registry.h"
 
-Chunk compile_script(const char *source);
+Chunk compile_script(const char *source, const Registry *registry);

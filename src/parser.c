@@ -3,6 +3,9 @@
 #include "chunk.h"
 #include "expr.h"
 #include "lexer.h"
+#include "registry.h"
+#include "type_def.h"
+#include "utility.h"
 #include "value.h"
 #include <assert.h>
 #include <stdbool.h>
@@ -17,11 +20,12 @@ enum { MAX_LOOP_HOLES = 32 };
 typedef enum Symbol {
   Symbol_None = 0,
   Symbol_Var,
+  Symbol_NativeFn,
 } Symbol;
 
 typedef struct Var {
   char *name;
-  ValueType type;
+  TypeDef type;
   size_t block_depth;
 } Var;
 
@@ -37,6 +41,7 @@ typedef struct LoopState {
 
 typedef struct Parser {
   Lexer lexer;
+  const Registry *registry;
 
   size_t block_level;
   Var vars[MAX_VARS];
@@ -78,22 +83,33 @@ static Token expect(Parser *parser, TokenType what, const char *error_msg) {
 static Symbol lookup_symbol(const Parser *parser, const char *name,
                             size_t name_len, size_t *out_idx) {
   for (size_t i = parser->vars_num - 1; i < MAX_VARS; i--) {
-    if (strncmp(name, parser->vars[i].name, name_len) == 0) {
+    const Var *var = &parser->vars[i];
+    if (compare_string(name, name_len, var->name, strlen(var->name))) {
       if (out_idx != NULL)
         *out_idx = i;
       return Symbol_Var;
     }
   }
+
+  for (size_t i = 0; i < parser->registry->native_fns_num; i++) {
+    const NativeFn *fn = &parser->registry->native_fns[i];
+    if (compare_string(name, name_len, fn->name, strlen(fn->name))) {
+      if (out_idx != NULL)
+        *out_idx = i;
+      return Symbol_NativeFn;
+    }
+  }
+
   return Symbol_None;
 }
 
 static size_t new_var(Parser *parser, const char *name, size_t name_len,
-                      ValueType type, LoopState *loop_state) {
+                      TypeDef type, LoopState *loop_state) {
   if (parser->vars_num >= MAX_VARS) {
     puts("too many variables");
     exit(-1);
   }
-  if (lookup_symbol(parser, name, name_len, NULL)) {
+  if (lookup_symbol(parser, name, name_len, NULL) != Symbol_None) {
     puts("symbol already defined");
     exit(-1);
   }
@@ -128,6 +144,50 @@ static void pop_var(Parser *parser, LoopState *loop_state) {
 
 static Expr *expr_base(Parser *parser);
 
+static Expr *call(Parser *parser, size_t idx, bool native) {
+  const NativeFn *fn = &parser->registry->native_fns[idx];
+
+  size_t args_num = 0;
+  Expr *argv_head = NULL, *argv_tail = NULL;
+  while (!is_eof(parser) && peek(parser).type != TokenType_RParen) {
+    Expr *arg = expr_base(parser);
+    if (is_type_def_void(arg->return_type)) {
+      puts("can't use void expression in argument");
+      exit(-1);
+    }
+    // variadic arguments are always any type
+    if (args_num < fn->args_num) {
+      if (!compare_type_def(fn->arg_types[args_num], arg->return_type)) {
+        puts("differing argument type");
+        exit(-1);
+      }
+    }
+
+    if (argv_head == NULL) {
+      argv_head = arg;
+      argv_tail = arg;
+    } else {
+      argv_tail->next = arg;
+      argv_tail = arg;
+    }
+
+    if (peek(parser).type != TokenType_RParen)
+      expect(parser, TokenType_Comma, "expected ',' after expression");
+    args_num++;
+  }
+  expect(parser, TokenType_RParen, "expected ')' to close '('");
+
+  if (args_num < fn->args_num) {
+    puts("too few arguments");
+    exit(-1);
+  } else if (args_num > fn->args_num && !fn->variadic) {
+    puts("too many arguments");
+    exit(-1);
+  }
+
+  return new_native_call_expr(idx, fn->return_type, argv_head);
+}
+
 static Expr *primary(Parser *parser) {
   Token token = peek(parser);
   switch (token.type) {
@@ -157,6 +217,18 @@ static Expr *primary(Parser *parser) {
       exit(-1);
     }
 
+    if (match(parser, TokenType_LParen)) {
+      if (sym != Symbol_NativeFn) {
+        fwrite(token.text.start, token.text.len, 1, stdout);
+        puts(" is not a function");
+        exit(-1);
+      }
+
+      return call(parser, sym_idx, true);
+    }
+    // TODO: function references?
+    assert(sym == Symbol_Var);
+
     return new_get_var_expr(sym_idx, parser->vars[sym_idx].type);
   }
 
@@ -175,7 +247,7 @@ static Expr *primary(Parser *parser) {
 static Expr *prefix(Parser *parser) {
   if (match(parser, TokenType_Minus)) {
     Expr *operand = primary(parser);
-    if (operand->value_type != ValueType_Number) {
+    if (!is_type_def_number(operand->return_type)) {
       puts("invalid negate operation");
       exit(-1);
     }
@@ -183,7 +255,7 @@ static Expr *prefix(Parser *parser) {
     return new_unary_expr(UnaryOp_Negate, operand);
   } else if (match(parser, TokenType_Bang)) {
     Expr *operand = primary(parser);
-    if (operand->value_type != ValueType_Boolean) {
+    if (!is_type_def_boolean(operand->return_type)) {
       puts("invalid logic not operation");
       exit(-1);
     }
@@ -194,22 +266,22 @@ static Expr *prefix(Parser *parser) {
   return primary(parser);
 }
 
-static bool check_numbers(BinaryOp op, ValueType lhs, ValueType rhs) {
-  return lhs == ValueType_Number && rhs == ValueType_Number;
+static bool check_numbers(BinaryOp op, TypeDef lhs, TypeDef rhs) {
+  return is_type_def_number(lhs) && is_type_def_number(rhs);
 }
 
-static bool check_addition(BinaryOp op, ValueType lhs, ValueType rhs) {
-  if (op == BinaryOp_Add && lhs == ValueType_String && rhs == ValueType_String)
+static bool check_addition(BinaryOp op, TypeDef lhs, TypeDef rhs) {
+  if (op == BinaryOp_Add && is_type_def_string(lhs) && is_type_def_string(rhs))
     return true;
   return check_numbers(op, lhs, rhs);
 }
 
-static bool check_equality(BinaryOp op, ValueType lhs, ValueType rhs) {
-  return lhs == rhs || lhs == ValueType_Null || rhs == ValueType_Null;
+static bool check_equality(BinaryOp op, TypeDef lhs, TypeDef rhs) {
+  return compare_type_def(lhs, rhs);
 }
 
-static bool check_booleans(BinaryOp op, ValueType lhs, ValueType rhs) {
-  return lhs == ValueType_Boolean && rhs == ValueType_Boolean;
+static bool check_booleans(BinaryOp op, TypeDef lhs, TypeDef rhs) {
+  return is_type_def_boolean(lhs) && is_type_def_boolean(rhs);
 }
 
 #define BINARY_OP_FN(name, next_fn, check_fn, cond)                            \
@@ -221,7 +293,7 @@ static bool check_booleans(BinaryOp op, ValueType lhs, ValueType rhs) {
       advance(parser);                                                         \
       BinaryOp op = token_to_binary_op(token.type);                            \
       Expr *rhs = next_fn(parser);                                             \
-      if (!check_fn(op, lhs->value_type, rhs->value_type)) {                   \
+      if (!check_fn(op, lhs->return_type, rhs->return_type)) {                 \
         puts("invalid binary operation");                                      \
         exit(-1);                                                              \
       }                                                                        \
@@ -251,7 +323,7 @@ static Expr *expr_base(Parser *parser) {
   Expr *expr = logic_or(parser);
   if (expr->type == ExprType_GetVar && match(parser, TokenType_Assign)) {
     Expr *value = expr_base(parser);
-    if (value->value_type != expr->value_type) {
+    if (!compare_type_def(expr->return_type, value->return_type)) {
       puts("differing types");
       exit(-1);
     }
@@ -290,7 +362,7 @@ static void block(Parser *parser, LoopState *loop_state) {
 
 static void if_statement(Parser *parser, LoopState *loop_state) {
   Expr *cond = expr_base(parser);
-  if (cond->value_type != ValueType_Boolean) {
+  if (!is_type_def_boolean(cond->return_type)) {
     puts("if condition must be a boolean");
     exit(-1);
   }
@@ -320,7 +392,7 @@ static void if_statement(Parser *parser, LoopState *loop_state) {
 
 static void while_statement(Parser *parser) {
   Expr *cond = expr_base(parser);
-  if (cond->value_type != ValueType_Boolean) {
+  if (!is_type_def_boolean(cond->return_type)) {
     puts("while condition must be a boolean");
     exit(-1);
   }
@@ -356,7 +428,7 @@ static void for_statement(Parser *parser) {
   expect(parser, TokenType_In, "expected 'in' after loop counter");
 
   Expr *from = expr_base(parser);
-  if (from->value_type != ValueType_Number) {
+  if (!is_type_def_number(from->return_type)) {
     puts("from expression must be a number");
     exit(-1);
   }
@@ -371,7 +443,7 @@ static void for_statement(Parser *parser) {
   }
 
   Expr *to = expr_base(parser);
-  if (to->value_type != ValueType_Number) {
+  if (!is_type_def_number(to->return_type)) {
     puts("to expression must be a number");
     exit(-1);
   }
@@ -380,7 +452,7 @@ static void for_statement(Parser *parser) {
   double step = 1.0;
   if (match(parser, TokenType_By)) {
     Expr *step_expr = expr_base(parser);
-    if (step_expr->value_type != ValueType_Number) {
+    if (!is_type_def_number(step_expr->return_type)) {
       puts("step expression must be a number");
       exit(-1);
     }
@@ -402,7 +474,7 @@ static void for_statement(Parser *parser) {
   set_context(parser, LexerContext_None);
 
   size_t counter_idx = new_var(parser, counter_token.text.start,
-                               counter_token.text.len, ValueType_Number, NULL);
+                               counter_token.text.len, TypeDef_Number, NULL);
 
   // init
   finalize_expr(parser, from);
@@ -484,8 +556,13 @@ static void var_decl(Parser *parser, LoopState *loop_state) {
   expect(parser, TokenType_Assign, "expected '=' after identifier");
 
   Expr *value = expr_base(parser);
-  new_var(parser, name_token.text.start, name_token.text.len, value->value_type,
-          loop_state);
+  if (is_type_def_void(value->return_type)) {
+    puts("void expression can't be used to initialize a variable");
+    exit(-1);
+  }
+
+  new_var(parser, name_token.text.start, name_token.text.len,
+          value->return_type, loop_state);
   finalize_expr(parser, value);
 
   expect(parser, TokenType_Semicolon,
@@ -509,16 +586,20 @@ static void statement(Parser *parser, LoopState *loop_state) {
     block(parser, loop_state);
   } else {
     // expression
-    finalize_expr(parser, expr_base(parser));
+    Expr *expr = expr_base(parser);
+    bool has_value = !is_type_def_void(expr->return_type);
+    finalize_expr(parser, expr);
     expect(parser, TokenType_Semicolon, "expected ';' after expression");
 
-    write_chunk_u8(&parser->chunk, Bytecode_Pop);
+    if (has_value)
+      write_chunk_u8(&parser->chunk, Bytecode_Pop);
   }
 }
 
-Chunk compile_script(const char *source) {
+Chunk compile_script(const char *source, const Registry *registry) {
   Parser parser = {
       .lexer = new_lexer(source),
+      .registry = registry,
 
       .block_level = 0,
       .vars = {},

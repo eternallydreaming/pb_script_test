@@ -1,14 +1,8 @@
 #pragma once
 
+#include "type_def.h"
 #include <stdbool.h>
 #include <stdint.h>
-
-typedef enum ValueType {
-  ValueType_Null = 0,
-  ValueType_Number,
-  ValueType_Boolean,
-  ValueType_String,
-} ValueType;
 
 typedef struct Obj {
   uint16_t ref_count;
@@ -37,6 +31,7 @@ Value new_number_value(double number);
 Value new_boolean_value(bool boolean);
 Value new_string_value_move(char *chars, uint32_t len);
 Value new_string_value(const char *chars, uint32_t len);
+Value new_c_string_value(const char *str);
 
 void reference_value(Value value);
 void release_value(Value value);

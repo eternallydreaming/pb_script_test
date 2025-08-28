@@ -1,10 +1,13 @@
 #include "vm.h"
 #include "bytecode.h"
 #include "chunk.h"
+#include "registry.h"
+#include "type_def.h"
 #include "value.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 static uint8_t read_u8(Vm *vm) { return read_chunk_u8(vm->chunk, &vm->pc); }
 static uint16_t read_u16(Vm *vm) { return read_chunk_u16(vm->chunk, &vm->pc); }
@@ -27,9 +30,11 @@ static Value pop(Vm *vm) {
   return vm->stack[--vm->sp];
 }
 
-Vm new_vm(const Chunk *chunk) {
+Vm new_vm(const Chunk *chunk, const Registry *registry) {
   return (Vm){
       .chunk = chunk,
+      .registry = registry,
+
       .stack = {},
       .sp = 0,
       .pc = 0,
@@ -86,6 +91,27 @@ Value run_vm(Vm *vm) {
 
       release_value(vm->stack[idx]);
       vm->stack[idx] = copy_value(peek(vm));
+      break;
+    }
+
+    case Bytecode_NativeCall: {
+      uint16_t idx = read_u16(vm);
+      assert(idx < vm->registry->native_fns_num);
+      const NativeFn *native_fn = &vm->registry->native_fns[idx];
+      uint8_t argc = read_u8(vm);
+      assert(vm->sp >= argc && argc >= native_fn->args_num);
+
+      Value *argv = vm->stack + vm->sp - argc;
+      Value result = native_fn->ptr(vm, argc, argv);
+
+      for (size_t i = 0; i < argc; i++)
+        release_value(argv[i]);
+      vm->sp -= argc;
+
+      if (!is_type_def_void(native_fn->return_type))
+        push(vm, result);
+      else
+        release_value(result);
       break;
     }
 
@@ -175,6 +201,7 @@ Value run_vm(Vm *vm) {
     }
   }
 
-  assert(vm->sp == 1);
-  return pop(vm);
+  // assert(vm->sp == 1);
+  return new_null_value();
+  // return pop(vm);
 }

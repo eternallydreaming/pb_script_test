@@ -1,12 +1,15 @@
 #pragma once
 
 #include "lexer.h"
+#include "type_def.h"
 #include "value.h"
 
 typedef enum ExprType {
   ExprType_Literal = 0,
   ExprType_GetVar,
   ExprType_SetVar,
+
+  ExprType_NativeCall,
 
   ExprType_Unary,
   ExprType_Binary,
@@ -35,9 +38,10 @@ typedef enum BinaryOp {
   BinaryOp_Or,
 } BinaryOp;
 
+struct ExprList;
 typedef struct Expr {
   ExprType type;
-  ValueType value_type;
+  TypeDef return_type;
   union {
     Value literal;
     struct {
@@ -49,6 +53,11 @@ typedef struct Expr {
     } set_var;
 
     struct {
+      size_t idx;
+      struct Expr *argv_head;
+    } call;
+
+    struct {
       UnaryOp op;
       struct Expr *operand;
     } unary;
@@ -57,14 +66,16 @@ typedef struct Expr {
       struct Expr *lhs, *rhs;
     } binary;
   };
+  struct Expr *next;
 } Expr;
 
 BinaryOp token_to_binary_op(TokenType type);
 
-Expr *new_expr(ExprType type, ValueType value_type);
+Expr *new_expr(ExprType type, TypeDef return_type);
 Expr *new_literal_expr(Value value);
-Expr *new_get_var_expr(size_t idx, ValueType value_type);
+Expr *new_get_var_expr(size_t idx, TypeDef type);
 Expr *new_set_var_expr(size_t idx, Expr *value);
+Expr *new_native_call_expr(size_t idx, TypeDef return_type, Expr *argv_head);
 Expr *new_unary_expr(UnaryOp op, Expr *operand);
 Expr *new_binary_expr(BinaryOp op, Expr *lhs, Expr *rhs);
 void delete_expr(Expr *expr);
