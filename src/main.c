@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 Value script_print(Vm *vm, size_t argc, Value argv[]) {
   for (size_t i = 0; i < argc; i++) {
@@ -51,7 +52,22 @@ Value script_tonumber(Vm *vm, size_t argc, Value argv[]) {
   return new_number_value(atof(value_as_c_string(argv[0])));
 }
 
+Value script_check_number(Vm *vm, size_t argc, Value argv[]) {
+  if (argv[0].type == ValueType_Number)
+    printf("got number %g\n", argv[0].number);
+  else
+    puts("got null!!!");
+  return new_null_value();
+}
+
+Value script_maybe_roll(Vm *vm, size_t argc, Value argv[]) {
+  if (rand() % 2 == 0)
+    return new_number_value(777);
+  return new_null_value();
+}
+
 int main(int argc, char *argv[]) {
+  srand(time(NULL));
   char source[1024];
   size_t len = fread(source, 1, sizeof(source) - 1, stdin);
   source[len] = 0;
@@ -61,6 +77,9 @@ int main(int argc, char *argv[]) {
   register_native_fn(&registry, "string append(string, string)", script_append);
   register_native_fn(&registry, "string tostring(number)", script_tostring);
   register_native_fn(&registry, "number tonumber(string)", script_tonumber);
+  register_native_fn(&registry, "void check_number(number?)",
+                     script_check_number);
+  register_native_fn(&registry, "number? maybe_roll()", script_maybe_roll);
 
   Chunk chunk = compile_script(source, &registry);
   disassemble_chunk(&chunk, &registry);

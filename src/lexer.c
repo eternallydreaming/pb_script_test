@@ -173,6 +173,8 @@ Token lexer_advance(Lexer *lexer) {
     return emit(lexer, TokenType_Comma);
   case ';':
     return emit(lexer, TokenType_Semicolon);
+  case '?':
+    return emit(lexer, TokenType_Question);
 
   case '+':
     return emit(lexer, TokenType_Plus);

@@ -16,6 +16,7 @@ typedef enum TokenType {
   TokenType_TripleDot,
   TokenType_Comma,
   TokenType_Semicolon,
+  TokenType_Question,
 
   TokenType_Plus,
   TokenType_Minus,

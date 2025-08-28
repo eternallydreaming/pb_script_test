@@ -1,5 +1,6 @@
 #include "value.h"
 #include "type_def.h"
+#include "utility.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -135,11 +136,10 @@ bool value_compare(Value lhs, Value rhs) {
   case ValueType_Number:
     return lhs.number == rhs.number;
   case ValueType_Boolean:
-    return lhs.boolean = rhs.boolean;
+    return lhs.boolean == rhs.boolean;
   case ValueType_String:
-    if (lhs.string->len != rhs.string->len)
-      return false;
-    return memcmp(lhs.string->chars, rhs.string->chars, lhs.string->len) == 0;
+    return compare_string(lhs.string->chars, lhs.string->len, rhs.string->chars,
+                          rhs.string->len);
   }
   return false;
 }

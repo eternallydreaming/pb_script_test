@@ -1,6 +1,7 @@
 #include "type_def.h"
 #include "lexer.h"
 #include "utility.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -58,13 +59,20 @@ TypeDef parse_type_def(Lexer *lexer) {
   }
   lexer_advance(lexer);
 
+  TypeDef def = new_type_def(ValueType_Error, false);
   for (const BuiltinType *type = BUILTIN_TYPES; type->text != NULL; type++) {
     if (compare_string(token.text.start, token.text.len, type->text,
                        strlen(type->text))) {
-      return new_type_def(type->value, false);
+      def.value = type->value;
+      break;
     }
   }
 
-  puts("unknown type");
-  return new_type_def(ValueType_Error, false);
+  if (lexer_peek(lexer).type == TokenType_Question) {
+    // optional type
+    lexer_advance(lexer);
+    def.optional = true;
+  }
+
+  return def;
 }

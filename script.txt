@@ -1,3 +1,7 @@
-print("Hello", "world");
-let a = tostring(24 * 2);
-print(tonumber(a) * 2);
+check_number(null);
+let roll = maybe_roll();
+if roll != null {
+  print("i got lucky!", roll);
+} else {
+  print("i'll win next time...");
+}

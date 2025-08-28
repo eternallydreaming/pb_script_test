@@ -150,12 +150,15 @@ static Expr *call(Parser *parser, size_t idx, bool native) {
   size_t args_num = 0;
   Expr *argv_head = NULL, *argv_tail = NULL;
   while (!is_eof(parser) && peek(parser).type != TokenType_RParen) {
+    if (args_num != 0)
+      expect(parser, TokenType_Comma, "expected ',' after expression");
+
     Expr *arg = expr_base(parser);
     if (is_type_def_void(arg->return_type)) {
       puts("can't use void expression in argument");
       exit(-1);
     }
-    // variadic arguments are always any type
+    // variadic arguments can be any type
     if (args_num < fn->args_num) {
       if (!compare_type_def(fn->arg_types[args_num], arg->return_type)) {
         puts("differing argument type");
@@ -170,9 +173,6 @@ static Expr *call(Parser *parser, size_t idx, bool native) {
       argv_tail->next = arg;
       argv_tail = arg;
     }
-
-    if (peek(parser).type != TokenType_RParen)
-      expect(parser, TokenType_Comma, "expected ',' after expression");
     args_num++;
   }
   expect(parser, TokenType_RParen, "expected ')' to close '('");
